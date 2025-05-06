@@ -16,6 +16,7 @@ go_library(
         "//cache:go_default_library",
         "//cache/azblobproxy:go_default_library",
         "//cache/gcsproxy:go_default_library",
+        "//cache/ghactions:go_default_library",
         "//cache/grpcproxy:go_default_library",
         "//cache/httpproxy:go_default_library",
         "//cache/s3proxy:go_default_library",

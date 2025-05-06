@@ -9,12 +9,16 @@ import (
 	"path"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+
 	"github.com/buchgr/bazel-remote/v2/cache"
 	"github.com/buchgr/bazel-remote/v2/cache/disk/casblob"
 	"github.com/buchgr/bazel-remote/v2/utils/backendproxy"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -32,7 +36,7 @@ var (
 )
 
 type azBlobCache struct {
-	containerClient  *azblob.ContainerClient
+	containerClient  *container.Client
 	storageAccount   string
 	container        string
 	prefix           string
@@ -44,9 +48,9 @@ type azBlobCache struct {
 	updateTimestamps bool
 }
 
-func (c *azBlobCache) Put(ctx context.Context, kind cache.EntryKind, hash string, logicalSize int64, sizeOnDisk int64, rc io.ReadCloser) {
+func (c *azBlobCache) Put(_ context.Context, kind cache.EntryKind, hash string, logicalSize int64, sizeOnDisk int64, rc io.ReadCloser) {
 	if c.uploadQueue == nil {
-		rc.Close()
+		_ = rc.Close()
 		return
 	}
 
@@ -60,7 +64,7 @@ func (c *azBlobCache) Put(ctx context.Context, kind cache.EntryKind, hash string
 	}:
 	default:
 		c.errorLogger.Printf("too many uploads queued\n")
-		rc.Close()
+		_ = rc.Close()
 	}
 }
 
@@ -69,19 +73,12 @@ func (c *azBlobCache) Get(ctx context.Context, kind cache.EntryKind, hash string
 	if c.prefix != "" {
 		key = c.prefix + "/" + key
 	}
-	client, err := c.containerClient.NewBlockBlobClient(key)
 
+	client := c.containerClient.NewBlockBlobClient(key)
+	resp, err := client.DownloadStream(ctx, nil)
 	if err != nil {
 		cacheMisses.Inc()
-		logResponse(c.accessLogger, "DOWNLOAD", c.storageAccount, c.container, key, err)
-		return nil, -1, err
-	}
-
-	resp, err := client.Download(context.Background(), nil)
-	if err != nil {
-		var stgErr *azblob.StorageError
-		cacheMisses.Inc()
-		if errors.As(err, &stgErr) && stgErr.ErrorCode == azblob.StorageErrorCodeBlobNotFound {
+		if bloberror.HasCode(err, bloberror.BlobNotFound) {
 			logResponse(c.accessLogger, "DOWNLOAD", c.storageAccount, c.container, key, errNotFound)
 			return nil, -1, nil
 		}
@@ -96,7 +93,7 @@ func (c *azBlobCache) Get(ctx context.Context, kind cache.EntryKind, hash string
 
 	logResponse(c.accessLogger, "DOWNLOAD", c.storageAccount, c.container, key, err)
 
-	rc = resp.Body(&azblob.RetryReaderOptions{MaxRetryRequests: 2})
+	rc = resp.Body
 
 	if kind == cache.CAS && c.v2mode {
 		return casblob.ExtractLogicalSize(rc)
@@ -120,15 +117,10 @@ func (c *azBlobCache) Contains(ctx context.Context, kind cache.EntryKind, hash s
 	size := int64(-1)
 	exists := false
 
-	client, err := c.containerClient.NewBlobClient(key)
-	if err != nil {
-		logResponse(c.accessLogger, "CONTAINS", c.storageAccount, c.container, key, err)
-		return exists, size
-	}
+	client := c.containerClient.NewBlobClient(key)
+	props, err := client.GetProperties(ctx, nil)
 
-	props, err := client.GetProperties(context.Background(), nil)
-
-	exists = (err == nil)
+	exists = err == nil
 	if err != nil {
 		err = errNotFound
 	} else if kind != cache.CAS || !c.v2mode {
@@ -154,24 +146,30 @@ func New(
 ) cache.Proxy {
 	url := fmt.Sprintf("https://%s.blob.core.windows.net/", storageAccount)
 
-	var err error
-	var serviceClient *azblob.ServiceClient
+	clientOpts := &container.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			Retry: policy.RetryOptions{
+				MaxRetries: 2,
+			},
+		},
+	}
+
+	var (
+		serviceClient *container.Client
+		err           error
+	)
+
 	if creds == nil && len(sharedKey) > 0 {
 		cred, e := azblob.NewSharedKeyCredential(storageAccount, sharedKey)
 		if e != nil {
 			log.Fatalln(e)
 		}
-		serviceClient, err = azblob.NewServiceClientWithSharedKey(url, cred, nil)
+		serviceClient, err = container.NewClientWithSharedKeyCredential(url, cred, clientOpts)
 
 	} else {
-		serviceClient, err = azblob.NewServiceClient(url, creds, nil)
+		serviceClient, err = container.NewClient(url, creds, clientOpts)
 	}
 
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	containerClient, err := serviceClient.NewContainerClient(containerName)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -182,7 +180,7 @@ func New(
 	}
 
 	c := &azBlobCache{
-		containerClient:  containerClient,
+		containerClient:  serviceClient,
 		prefix:           prefix,
 		storageAccount:   storageAccount,
 		container:        containerName,
@@ -214,26 +212,19 @@ func (c *azBlobCache) UploadFile(item backendproxy.UploadReq) {
 	if c.prefix != "" {
 		key = c.prefix + "/" + key
 	}
-	client, err := c.containerClient.NewBlockBlobClient(key)
-	if err != nil {
-		logResponse(c.accessLogger, "UPLOAD", c.storageAccount, c.container, key, err)
-		return
-	}
 
-	_, err = client.Upload(context.Background(), item.Rc.(io.ReadSeekCloser), nil)
+	client := c.containerClient.NewBlockBlobClient(key)
+	_, err := client.UploadStream(context.Background(), item.Rc, nil)
 
 	logResponse(c.accessLogger, "UPLOAD", c.storageAccount, c.container, key, err)
 }
 
 func (c *azBlobCache) UpdateModificationTimestamp(ctx context.Context, key string) {
-	client, err := c.containerClient.NewBlockBlobClient(key)
-	if err != nil {
-		logResponse(c.accessLogger, "UPDATE_TIMESTAMPS", c.storageAccount, c.container, key, err)
+	client := c.containerClient.NewBlockBlobClient(key)
+	metadata := map[string]*string{
+		"LastModified": ptrOf(time.Now().Format("1/2/2006, 03:05 PM")),
 	}
-	metadata := map[string]string{
-		"LastModified": time.Now().Format("1/2/2006, 03:05 PM"),
-	}
-	_, err = client.SetMetadata(ctx, metadata, nil)
+	_, err := client.SetMetadata(ctx, metadata, nil)
 	logResponse(c.accessLogger, "UPDATE_TIMESTAMPS", c.storageAccount, c.container, key, err)
 }
 
@@ -269,4 +260,8 @@ func logResponse(log cache.Logger, method, storageAccount, container, key string
 	}
 
 	log.Printf("AZBLOB %s %s %s %s", method, storageAccount, container, key, status)
+}
+
+func ptrOf[T any](v T) *T {
+	return &v
 }

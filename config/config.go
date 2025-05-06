@@ -48,6 +48,11 @@ type LDAPConfig struct {
 	CacheTime         time.Duration `yaml:"cache_time"`
 }
 
+type GithubActionsCacheConfig struct {
+	CacheURL string `yaml:"cache_url"`
+	Token    string `yaml:"token"`
+}
+
 func (c *URLBackendConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	type Aux URLBackendConfig
 	aux := &struct {
@@ -110,6 +115,7 @@ type Config struct {
 	GoogleCloudStorage          *GoogleCloudStorageConfig `yaml:"gcs_proxy,omitempty"`
 	HTTPBackend                 *URLBackendConfig         `yaml:"http_proxy,omitempty"`
 	GRPCBackend                 *URLBackendConfig         `yaml:"grpc_proxy,omitempty"`
+	GithubActionsCache          *GithubActionsCacheConfig `yaml:"ghactions_proxy,omitempty"`
 	NumUploaders                int                       `yaml:"num_uploaders"`
 	MaxQueuedUploads            int                       `yaml:"max_queued_uploads"`
 	IdleTimeout                 time.Duration             `yaml:"idle_timeout"`
@@ -172,6 +178,7 @@ func newFromArgs(dir string, maxSize int, storageMode string, zstdImplementation
 	ldap *LDAPConfig,
 	s3 *S3CloudStorageConfig,
 	azblob *AzBlobStorageConfig,
+	githubActionsCache *GithubActionsCacheConfig,
 	disableHTTPACValidation bool,
 	disableGRPCACDepsCheck bool,
 	enableACKeyInstanceMangling bool,
@@ -207,6 +214,7 @@ func newFromArgs(dir string, maxSize int, storageMode string, zstdImplementation
 		HTTPBackend:                 hc,
 		GRPCBackend:                 grpcb,
 		LDAP:                        ldap,
+		GithubActionsCache:          githubActionsCache,
 		IdleTimeout:                 idleTimeout,
 		DisableHTTPACValidation:     disableHTTPACValidation,
 		DisableGRPCACDepsCheck:      disableGRPCACDepsCheck,
@@ -327,8 +335,12 @@ func validateConfig(c *Config) error {
 		proxyCount++
 	}
 
+	if c.GithubActionsCache != nil {
+		proxyCount++
+	}
+
 	if proxyCount > 1 {
-		return errors.New("At most one of the S3/GCS/HTTP proxy backends is allowed")
+		return errors.New("At most one of the S3/GCS/HTTP/GHActions proxy backends is allowed")
 	}
 
 	var httpPort string
@@ -482,6 +494,16 @@ func validateConfig(c *Config) error {
 		}
 		if c.LDAP.CacheTime <= 0 {
 			c.LDAP.CacheTime = 3600
+		}
+	}
+
+	if actionsCacheCfg := c.GithubActionsCache; actionsCacheCfg != nil {
+		if actionsCacheCfg.CacheURL == "" {
+			return errors.New("The 'cache_url' field is required for 'ghactions_proxy'")
+		}
+
+		if actionsCacheCfg.Token == "" {
+			return errors.New("The 'token' field is required for 'ghactions_proxy'")
 		}
 	}
 
@@ -639,6 +661,14 @@ func get(ctx *cli.Context) (*Config, error) {
 		}
 	}
 
+	var ghActions *GithubActionsCacheConfig
+	if cacheUrl, token := ctx.String("ghactions.cache_url"), ctx.String("ghactions.runtime_token"); cacheUrl != "" && token != "" {
+		ghActions = &GithubActionsCacheConfig{
+			CacheURL: cacheUrl,
+			Token:    token,
+		}
+	}
+
 	return newFromArgs(
 		ctx.String("dir"),
 		ctx.Int("max_size"),
@@ -662,6 +692,7 @@ func get(ctx *cli.Context) (*Config, error) {
 		ldap,
 		s3,
 		azblob,
+		ghActions,
 		ctx.Bool("disable_http_ac_validation"),
 		ctx.Bool("disable_grpc_ac_deps_check"),
 		ctx.Bool("enable_ac_key_instance_mangling"),

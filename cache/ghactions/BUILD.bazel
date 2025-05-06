@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//proto:compiler.bzl", "go_proto_compiler")
+
+# gazelle:proto package
+# gazelle:go_grpc_compilers //cache/ghactions:protoc-gen-twirp
+# gazelle:go_proto_compilers @io_bazel_rules_go//proto:go_proto
+
+go_proto_compiler(
+    name = "protoc-gen-twirp",
+    plugin = "@com_github_twitchtv_twirp//protoc-gen-twirp:protoc-gen-twirp",
+    suffix = ".twirp.go",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_twitchtv_twirp//:go_default_library",
+        "@com_github_twitchtv_twirp//ctxsetters",
+        "@org_golang_google_protobuf//encoding/protojson",
+        "@org_golang_google_protobuf//proto",
+    ],
+)
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "gh_actions_cache.go",
+        "transport.go",
+    ],
+    importpath = "github.com/buchgr/bazel-remote/v2/cache/ghactions",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cache:go_default_library",
+        "//cache/disk/casblob:go_default_library",
+        "//cache/ghactions/results/api/v1:v1_go_proto",
+        "//utils/backendproxy:go_default_library",
+        "@com_github_azure_azure_sdk_for_go_sdk_storage_azblob//blockblob:go_default_library",
+        "@com_github_twitchtv_twirp//:go_default_library",
+    ],
+)

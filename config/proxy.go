@@ -6,19 +6,22 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 
-	"github.com/buchgr/bazel-remote/v2/cache/azblobproxy"
-	"github.com/buchgr/bazel-remote/v2/cache/gcsproxy"
-	"github.com/buchgr/bazel-remote/v2/cache/grpcproxy"
-	"github.com/buchgr/bazel-remote/v2/cache/httpproxy"
-	"github.com/buchgr/bazel-remote/v2/cache/s3proxy"
 	"github.com/minio/minio-go/v7"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+
+	"github.com/buchgr/bazel-remote/v2/cache/azblobproxy"
+	"github.com/buchgr/bazel-remote/v2/cache/gcsproxy"
+	"github.com/buchgr/bazel-remote/v2/cache/ghactions"
+	"github.com/buchgr/bazel-remote/v2/cache/grpcproxy"
+	"github.com/buchgr/bazel-remote/v2/cache/httpproxy"
+	"github.com/buchgr/bazel-remote/v2/cache/s3proxy"
 
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	prom "github.com/prometheus/client_golang/prometheus"
@@ -170,6 +173,18 @@ func (c *Config) setProxy() error {
 			c.StorageMode, c.AccessLogger, c.ErrorLogger, c.NumUploaders, c.MaxQueuedUploads,
 		)
 		return nil
+	}
+
+	if ghActionsCfg := c.GithubActionsCache; ghActionsCfg != nil {
+		log.Println("Using Github Actions Cache")
+		c.ProxyBackend = ghactions.New(
+			ghActionsCfg.CacheURL,
+			ghActionsCfg.Token,
+			c.AccessLogger,
+			c.ErrorLogger,
+			c.NumUploaders,
+			c.MaxQueuedUploads,
+		)
 	}
 
 	return nil

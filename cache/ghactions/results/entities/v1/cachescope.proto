@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package github.actions.results.entities.v1;
+
+option go_package = "github.com/buchgr/bazel-remote/v2/cache/ghactions/results/entities/v1";
+
+// Defines permission levels for cache access
+enum CachePermission {
+  NONE = 0;
+  READ = 1;
+  WRITE = 2;
+  ALL = 3;  // Combination of READ and WRITE (1|2)
+}
+
+// CacheScope defines the scope and permission level for a cache entry
+message CacheScope {
+  // Determines the scope of the cache entry
+  string scope = 1;
+
+  // Permission level for this cache scope
+  CachePermission permission = 2;
+}

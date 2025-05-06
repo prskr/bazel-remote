@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+
+proto_library(
+    name = "v1_proto",
+    srcs = ["cache.proto"],
+    visibility = ["//visibility:public"],
+    deps = ["//cache/ghactions/results/entities/v1:v1_proto"],
+)
+
+go_proto_library(
+    name = "v1_go_proto",
+    compilers = [
+        "//cache/ghactions:protoc-gen-twirp",
+        "@io_bazel_rules_go//proto:go_proto",  # keep
+    ],
+    importpath = "github.com/buchgr/bazel-remote/v2/cache/ghactions/results/api/v1",
+    proto = ":v1_proto",
+    visibility = ["//visibility:public"],
+    deps = ["//cache/ghactions/results/entities/v1:v1_go_proto"],
+)

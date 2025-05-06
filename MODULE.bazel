@@ -80,6 +80,11 @@ go_deps.module(
     sum = "h1:R2ZVGCZzU95oXFJxncosHS9LsX8N4/MYUdGGWOb2cFk=",
     version = "v0.4.1-0.20220112235402-e1cee1c72f2f",
 )
+go_deps.module(
+    path = "github.com/twitchtv/twirp",
+    sum = "h1:+F4TdErPgSUbMZMwp13Q/KgDVuI7HJXP61mNV3/7iuU=",
+    version = "v8.1.3+incompatible",
+)
 go_deps.module_override(
     patch_strip = 1,
     patches = [
@@ -118,6 +123,7 @@ use_repo(
     "com_github_shabbyrobe_gocovmerge",
     "com_github_slok_go_http_metrics",
     "com_github_spf13_afero",
+    "com_github_twitchtv_twirp",
     "com_github_urfave_cli_v2",
     "com_github_valyala_gozstd",
     "com_google_cloud_go_longrunning",

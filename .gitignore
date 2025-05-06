@@ -13,3 +13,10 @@
 /bazel-*
 
 /bazel-remote
+
+# IntelliJ
+.ijwb/
+.idea/
+
+# Zed
+.zed/

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package github.actions.results.entities.v1;
+
+option go_package = "github.com/buchgr/bazel-remote/v2/cache/ghactions/results/entities/v1";
+
+// Import the cachescope.proto which contains the CacheScope message
+import "cache/ghactions/results/entities/v1/cachescope.proto";
+
+// CacheMetadata contains information about a cache entry
+message CacheMetadata {
+  // Backend repository id
+  int64 repository_id = 1;
+
+  // Scopes for the cache entry
+  repeated CacheScope scope = 2;
+}

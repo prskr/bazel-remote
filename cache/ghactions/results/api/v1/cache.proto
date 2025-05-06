@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package github.actions.results.api.v1;
+
+option go_package = "github.com/buchgr/bazel-remote/v2/cache/ghactions/results/api/v1";
+
+// Import the cachemetadata.proto which contains the CacheMetadata message
+import "cache/ghactions/results/entities/v1/cachemetadata.proto";
+
+// Service for managing cache entries
+service CacheService {
+  // Creates a new cache entry and returns a URL for uploading the cache content
+  rpc CreateCacheEntry(CreateCacheEntryRequest) returns (CreateCacheEntryResponse);
+
+  // Finalizes a cache entry upload after the content has been uploaded
+  rpc FinalizeCacheEntryUpload(FinalizeCacheEntryUploadRequest) returns (FinalizeCacheEntryUploadResponse);
+
+  // Retrieves a download URL for a cache entry
+  rpc GetCacheEntryDownloadURL(GetCacheEntryDownloadURLRequest) returns (GetCacheEntryDownloadURLResponse);
+}
+
+// Request message for creating a new cache entry
+message CreateCacheEntryRequest {
+  // Scope and other metadata for the cache entry
+  github.actions.results.entities.v1.CacheMetadata metadata = 1;
+
+  // An explicit key for a cache entry
+  string key = 2;
+
+  // Hash of the compression tool, runner OS and paths cached
+  string version = 3;
+}
+
+// Response message for creating a new cache entry
+message CreateCacheEntryResponse {
+  // Indicates if the operation was successful
+  bool ok = 1;
+
+  // SAS URL to upload the cache archive
+  string signed_upload_url = 2;
+}
+
+// Request message for finalizing a cache entry upload
+message FinalizeCacheEntryUploadRequest {
+  // Scope and other metadata for the cache entry
+  github.actions.results.entities.v1.CacheMetadata metadata = 1;
+
+  // An explicit key for a cache entry
+  string key = 2;
+
+  // Size of the cache archive in Bytes
+  int64 size_bytes = 3;
+
+  // Hash of the compression tool, runner OS and paths cached
+  string version = 4;
+}
+
+// Response message for finalizing a cache entry upload
+message FinalizeCacheEntryUploadResponse {
+  // Indicates if the operation was successful
+  bool ok = 1;
+
+  // Cache entry database ID
+  int64 entry_id = 2;
+}
+
+// Request message for getting a cache entry download URL
+message GetCacheEntryDownloadURLRequest {
+  // Scope and other metadata for the cache entry
+  github.actions.results.entities.v1.CacheMetadata metadata = 1;
+
+  // An explicit key for a cache entry
+  string key = 2;
+
+  // Restore keys used for prefix searching
+  repeated string restore_keys = 3;
+
+  // Hash of the compression tool, runner OS and paths cached
+  string version = 4;
+}
+
+// Response message for getting a cache entry download URL
+message GetCacheEntryDownloadURLResponse {
+  // Indicates if the operation was successful
+  bool ok = 1;
+
+  // SAS URL to download the cache archive
+  string signed_download_url = 2;
+
+  // Key or restore key that matches the lookup
+  string matched_key = 3;
+}

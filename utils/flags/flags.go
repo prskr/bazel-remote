@@ -463,6 +463,18 @@ func GetCliFlags() []cli.Flag {
 			Usage:   "Path to the certificates file. " + azBlobAuthMsg(azblobproxy.AuthMethodClientCertificate),
 			EnvVars: []string{"BAZEL_REMOTE_AZBLOB_CERT_PATH", "AZURE_CLIENT_CERTIFICATE_PATH"},
 		},
+		&cli.StringFlag{
+			Name:    "ghactions.cache_url",
+			Value:   "",
+			Usage:   "The URL of the GitHub Actions cache",
+			EnvVars: []string{"ACTIONS_RESULTS_URL"},
+		},
+		&cli.StringFlag{
+			Name:    "ghactions.runtime_token",
+			Value:   "",
+			Usage:   "The GitHub Actions runtime token",
+			EnvVars: []string{"ACTIONS_RUNTIME_TOKEN"},
+		},
 		&cli.BoolFlag{
 			Name:        "disable_http_ac_validation",
 			Usage:       "Whether to disable ActionResult validation for HTTP requests.",
